@@ -13,10 +13,11 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
 <style>
-  html, body { margin: 0; height: 100%; background: #16181d; color: #ececec; font-family: -apple-system, system-ui, Arial, sans-serif; }
-  /* The Edge page sits inside the safe area (below the notch, above the home bar); the strips stay dark. */
-  #app { position: fixed; left: 0; right: 0; top: env(safe-area-inset-top); bottom: env(safe-area-inset-bottom); border: 0; width: 100%; height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom)); background: #1e2127; }
-  #setup { display: none; box-sizing: border-box; min-height: 100%; padding: calc(env(safe-area-inset-top) + 40px) 24px calc(env(safe-area-inset-bottom) + 24px); }
+  html, body { margin: 0; height: 100%; background: #16181d; color: #ececec; font-family: -apple-system, system-ui, Arial, sans-serif; overflow: hidden; overscroll-behavior: none; }
+  body { position: fixed; inset: 0; } /* the wrapper never scrolls or bounces */
+  /* The Edge page gets the whole screen and keeps itself clear of the notch and home bar (counted once, in the page). */
+  #app { position: fixed; inset: 0; border: 0; width: 100%; height: 100%; background: #1e2127; }
+  #setup { display: none; overflow-y: auto; height: 100%; box-sizing: border-box; min-height: 100%; padding: calc(env(safe-area-inset-top) + 40px) 24px calc(env(safe-area-inset-bottom) + 24px); }
   #setup img { width: 84px; height: 84px; border-radius: 18px; }
   h1 { font-size: 26px; margin: 18px 0 6px; }
   p { color: #a7acb5; font-size: 16px; line-height: 1.45; }
