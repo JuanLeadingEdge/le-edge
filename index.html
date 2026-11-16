@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,7 +16,8 @@
   html, body { margin: 0; height: 100%; background: #16181d; color: #ececec; font-family: -apple-system, system-ui, Arial, sans-serif; overflow: hidden; overscroll-behavior: none; }
   body { position: fixed; inset: 0; } /* the wrapper never scrolls or bounces */
   /* The Edge page gets the whole screen and keeps itself clear of the notch and home bar (counted once, in the page). */
-  #app { position: fixed; inset: 0; border: 0; width: 100%; height: 100%; background: #1e2127; }
+  * { box-sizing: border-box; }
+  #app { position: fixed; inset: 0; border: 0; margin: 0; padding: 0; display: block; width: 100%; height: 100%; max-width: 100%; background: #1e2127; }
   #setup { display: none; overflow-y: auto; height: 100%; box-sizing: border-box; min-height: 100%; padding: calc(env(safe-area-inset-top) + 40px) 24px calc(env(safe-area-inset-bottom) + 24px); }
   #setup img { width: 84px; height: 84px; border-radius: 18px; }
   h1 { font-size: 26px; margin: 18px 0 6px; }
