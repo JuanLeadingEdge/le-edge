@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LE Edge">
+<meta name="theme-color" content="#16181d">
+<title>LE Edge</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<!-- WO-058: OneSignal web push (app id is public). The service worker is OneSignalSDKWorker.js in this folder. -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #16181d; color: #ececec; font-family: -apple-system, system-ui, Arial, sans-serif; overflow: hidden; overscroll-behavior: none; }
+  body { position: fixed; inset: 0; } /* the wrapper never scrolls or bounces */
+  /* The Edge page gets the whole screen and keeps itself clear of the notch and home bar (counted once, in the page). */
+  * { box-sizing: border-box; }
+  #app { position: fixed; inset: 0; border: 0; margin: 0; padding: 0; display: block; width: 100%; height: 100%; max-width: 100%; background: #1e2127; }
+  #setup { display: none; overflow-y: auto; height: 100%; box-sizing: border-box; min-height: 100%; padding: calc(env(safe-area-inset-top) + 40px) 24px calc(env(safe-area-inset-bottom) + 24px); }
+  #setup img { width: 84px; height: 84px; border-radius: 18px; }
+  h1 { font-size: 26px; margin: 18px 0 6px; }
+  p { color: #a7acb5; font-size: 16px; line-height: 1.45; }
+  textarea { box-sizing: border-box; width: 100%; height: 120px; margin-top: 10px; padding: 12px; border-radius: 12px; border: 1px solid #3b414c; background: #272b33; color: #ececec; font-size: 15px; }
+  button { margin-top: 14px; width: 100%; height: 54px; border: 0; border-radius: 12px; font-size: 18px; font-weight: 700; }
+  .go { background: #e5201b; color: #fff; }
+  .plain { background: #272b33; color: #ececec; }
+  #err { color: #ff8a86; min-height: 22px; font-size: 15px; }
+  #reset { position: fixed; z-index: 2; right: 0; bottom: 0; width: 44px; height: 44px; opacity: 0; }
+  /* "Turn on notifications": iOS only asks after a tap in this page, so the button lives here (not in the Edge page). */
+  #notif { position: fixed; z-index: 3; left: 50%; top: calc(env(safe-area-inset-top) + 64px); transform: translateX(-50%); display: none; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; background: #e5201b; color: #fff; font-size: 15px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+  #notif button { margin: 0; width: auto; height: 34px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
+  #notif .x { background: rgba(255,255,255,.2); color: #fff; }
+</style>
+</head>
+<body>
+<!--
+  LE Edge phone wrapper (WO-048). This file holds NO key and NO keyed link.
+  On first open it asks for the Edge phone link (LE Links > Device links > Manager Edge - Phone),
+  keeps it only on this phone (localStorage), and then shows it full screen.
+  Reset: press and hold the bottom-right corner for 2 seconds, or open this page with #reset.
+-->
+<div id="setup">
+  <img src="apple-touch-icon.png" alt="">
+  <h1>LE Edge</h1>
+  <p>Paste your Edge phone link. Find it in <b>LE Links &rsaquo; Device links &rsaquo; Manager Edge - Phone</b> (tap Copy). It stays only on this phone.</p>
+  <textarea id="link" placeholder="Paste the Edge phone link" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+  <div id="err"></div>
+  <button class="go" id="save">Save and open</button>
+</div>
+<iframe id="app" title="LE Edge" allow="clipboard-write" style="display:none"></iframe>
+<div id="reset" aria-hidden="true"></div>
+<div id="notif"><button type="button" class="plain" id="notifOn">Turn on notifications</button><button type="button" class="x" id="notifLater">Later</button></div>
+<script>
+  var KEY_NAME = 'leEdgePhoneLink';
+  function stored() { try { return localStorage.getItem(KEY_NAME) || ''; } catch (e) { return ''; } }
+  function valid(u) { return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec\?/.test(u) && /[?&]k=/.test(u); }
+  function phoneLink(u) { return /[?&]v=phone/.test(u) ? u : u + '&v=phone'; }
+  function showSetup(msg) {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('app').removeAttribute('src');
+    document.getElementById('setup').style.display = 'block';
+    document.getElementById('err').textContent = msg || '';
+  }
+  function open(u) {
+    var f = document.getElementById('app');
+    document.getElementById('setup').style.display = 'none';
+    f.style.display = 'block';
+    f.src = u;
+  }
+  document.getElementById('save').addEventListener('click', function () {
+    var u = document.getElementById('link').value.trim();
+    if (!valid(u)) { document.getElementById('err').textContent = 'That is not the Edge phone link. Copy it again from LE Links.'; return; }
+    u = phoneLink(u);
+    try { localStorage.setItem(KEY_NAME, u); } catch (e) {}
+    open(u);
+  });
+  function reset() {
+    if (!confirm('Forget the saved Edge link on this phone?')) return;
+    try { localStorage.removeItem(KEY_NAME); } catch (e) {}
+    document.getElementById('link').value = '';
+    showSetup('');
+  }
+  var holdTimer = null, r = document.getElementById('reset');
+  r.addEventListener('touchstart', function () { holdTimer = setTimeout(reset, 2000); }, { passive: true });
+  r.addEventListener('touchend', function () { clearTimeout(holdTimer); });
+  if (location.hash === '#reset') { history.replaceState(null, '', location.pathname); reset(); }
+  var u = stored();
+  if (valid(u)) open(phoneLink(u)); else showSetup('');
+
+  // ---------- WO-058: notifications (OneSignal) + app icon badge ----------
+  var APP_ID = 'a934a2fe-4474-48dc-af9e-8827efb8c3ef';
+  var OS = null, LATER = false;
+  function notifOn() { try { return !!(OS && OS.Notifications.permission && OS.User.PushSubscription.optedIn); } catch (e) { return false; } }
+  function tellApp() {
+    var f = document.getElementById('app');
+    try { if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'le-notif', on: notifOn() }, '*'); } catch (e) {}
+    document.getElementById('notif').style.display = OS && !notifOn() && !LATER && valid(stored()) ? 'flex' : 'none';
+  }
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  window.OneSignalDeferred.push(async function (OneSignal) {
+    try {
+      await OneSignal.init({ appId: APP_ID, serviceWorkerPath: 'le-edge/OneSignalSDKWorker.js', serviceWorkerParam: { scope: '/le-edge/' } });
+      OS = OneSignal;
+      await OneSignal.login('le-manager'); // the Manager's phone (LE Core pushes to external id "le-manager")
+      OneSignal.Notifications.addEventListener('permissionChange', tellApp);
+      OneSignal.User.PushSubscription.addEventListener('change', tellApp);
+    } catch (e) { OS = null; }
+    tellApp();
+  });
+  document.getElementById('notifOn').addEventListener('click', async function () {
+    if (!OS) return;
+    try { await OS.Notifications.requestPermission(); await OS.User.PushSubscription.optIn(); } catch (e) {}
+    tellApp();
+  });
+  document.getElementById('notifLater').addEventListener('click', function () { LATER = true; tellApp(); });
+  // Messages from the Edge page inside the frame: badge count and "hello" (asks for the notification state).
+  window.addEventListener('message', function (e) {
+    if (!/(\.googleusercontent\.com|script\.google\.com)$/.test(String(e.origin || '').replace(/:\d+$/, ''))) return;
+    var d = e.data || {};
+    if (d.type === 'le-hello') tellApp();
+    if (d.type === 'le-badge' && typeof d.count === 'number' && navigator.setAppBadge) {
+      try { if (d.count > 0) navigator.setAppBadge(d.count); else navigator.clearAppBadge(); } catch (err) {}
+    }
+  });
+</script>
+</body>
+</html>
