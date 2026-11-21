@@ -55,6 +55,7 @@
 </div>
 <iframe id="app" title="LE Edge" allow="clipboard-write" style="display:none"></iframe>
 <div id="reset" aria-hidden="true"></div>
+<div id="diag" style="display:none;position:fixed;z-index:4;left:8px;right:8px;top:calc(env(safe-area-inset-top) + 8px);padding:10px;border-radius:10px;background:#000;color:#8fd18a;font:12px monospace;word-break:break-word"></div>
 <div id="notif"><span aria-hidden="true">&#128276;</span><button type="button" class="on" id="notifOn">Turn on notifications</button><button type="button" class="x" id="notifLater" aria-label="Hide for now">&#10005;</button></div>
 <script>
   var KEY_NAME = 'leEdgePhoneLink';
@@ -94,7 +95,7 @@
   if (valid(u)) open(phoneLink(u)); else showSetup('');
 
   // ---------- WO-058: notifications (OneSignal) + app icon badge ----------
-  var APP_ID = 'a934a2fe-4474-48dc-af9e-8827efb8c3ef';
+  var APP_ID = 'a934a2fe-4474-48dc-af9e-8827efb8c3ef', WRAPPER_VERSION = '58c';
   var OS = null, LATER = false;
   function notifOn() {
     try { if (OS) return !!(OS.Notifications.permission && OS.User.PushSubscription.optedIn); } catch (e) {}
@@ -110,7 +111,8 @@
     var f = document.getElementById('app');
     if (f && f.contentWindow) toFrames(f.contentWindow, { type: 'le-notif', on: notifOn() }, 0);
     // The bell shows by itself whenever notifications are not on (not waiting for the page or for OneSignal).
-    document.getElementById('notif').style.display = !notifOn() && !LATER && valid(stored()) ? 'flex' : 'none';
+    document.getElementById('notif').style.display = !notifOn() && !LATER ? 'flex' : 'none';
+    diag();
   }
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   window.OneSignalDeferred.push(async function (OneSignal) {
@@ -131,6 +133,18 @@
     tellApp();
   });
   document.getElementById('notifLater').addEventListener('click', function () { LATER = true; tellApp(); });
+  // Diagnostics (no secrets): open with #diag, or hold the bell for 2 seconds.
+  function diag() {
+    var el = document.getElementById('diag'); if (!el) return;
+    var perm = 'n/a'; try { perm = typeof Notification === 'undefined' ? 'no Notification API' : Notification.permission; } catch (e) {}
+    var sub = 'n/a'; try { sub = OS ? String(OS.User.PushSubscription.optedIn) : 'OneSignal not loaded'; } catch (e) {}
+    el.textContent = 'wrapper ' + WRAPPER_VERSION + ' | standalone ' + (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches) +
+      ' | permission ' + perm + ' | opted in ' + sub + ' | push API ' + ('PushManager' in window) + ' | badge API ' + !!navigator.setAppBadge;
+  }
+  var bellHold = null;
+  document.getElementById('notif').addEventListener('touchstart', function () { bellHold = setTimeout(function () { document.getElementById('diag').style.display = 'block'; diag(); }, 2000); }, { passive: true });
+  document.getElementById('notif').addEventListener('touchend', function () { clearTimeout(bellHold); });
+  if (location.hash === '#diag') setTimeout(function () { document.getElementById('diag').style.display = 'block'; diag(); }, 500);
   tellApp(); // show the bell right away; OneSignal updates it when it loads
   setTimeout(tellApp, 4000);
   // Messages from the Edge page (it posts to window.top = this page): badge count and "hello".
