@@ -30,10 +30,12 @@
   .plain { background: #272b33; color: #ececec; }
   #err { color: #ff8a86; min-height: 22px; font-size: 15px; }
   #reset { position: fixed; z-index: 2; right: 0; bottom: 0; width: 44px; height: 44px; opacity: 0; }
-  /* "Turn on notifications": iOS only asks after a tap in this page, so the button lives here (not in the Edge page). */
-  #notif { position: fixed; z-index: 3; left: 50%; top: calc(env(safe-area-inset-top) + 64px); transform: translateX(-50%); display: none; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; background: #e5201b; color: #fff; font-size: 15px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
-  #notif button { margin: 0; width: auto; height: 34px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
-  #notif .x { background: rgba(255,255,255,.2); color: #fff; }
+  /* "Turn on notifications": iOS only asks after a tap in THIS page, so the bell lives here. It shows by itself whenever
+     notifications are not on (no handshake needed), bottom-left above the Edge page's tab bar. */
+  #notif { position: fixed; z-index: 3; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 66px); display: none; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-radius: 22px; background: #e5201b; color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+  #notif button { margin: 0; width: auto; height: 32px; padding: 0 10px; font-size: 14px; font-weight: 700; border-radius: 16px; border: 0; }
+  #notif .on { background: #fff; color: #9e1a1f; }
+  #notif .x { background: rgba(255,255,255,.22); color: #fff; padding: 0 9px; }
 </style>
 </head>
 <body>
@@ -53,7 +55,7 @@
 </div>
 <iframe id="app" title="LE Edge" allow="clipboard-write" style="display:none"></iframe>
 <div id="reset" aria-hidden="true"></div>
-<div id="notif"><button type="button" class="plain" id="notifOn">Turn on notifications</button><button type="button" class="x" id="notifLater">Later</button></div>
+<div id="notif"><span aria-hidden="true">&#128276;</span><button type="button" class="on" id="notifOn">Turn on notifications</button><button type="button" class="x" id="notifLater" aria-label="Hide for now">&#10005;</button></div>
 <script>
   var KEY_NAME = 'leEdgePhoneLink';
   function stored() { try { return localStorage.getItem(KEY_NAME) || ''; } catch (e) { return ''; } }
@@ -94,11 +96,21 @@
   // ---------- WO-058: notifications (OneSignal) + app icon badge ----------
   var APP_ID = 'a934a2fe-4474-48dc-af9e-8827efb8c3ef';
   var OS = null, LATER = false;
-  function notifOn() { try { return !!(OS && OS.Notifications.permission && OS.User.PushSubscription.optedIn); } catch (e) { return false; } }
+  function notifOn() {
+    try { if (OS) return !!(OS.Notifications.permission && OS.User.PushSubscription.optedIn); } catch (e) {}
+    try { return typeof Notification !== 'undefined' && Notification.permission === 'granted' && !!OS; } catch (e) { return false; }
+  }
+  // Apps Script nests the Edge page inside Google's frames: send to every frame under ours (the page checks our origin).
+  function toFrames(win, msg, depth) {
+    if (!win || depth > 4) return;
+    try { win.postMessage(msg, '*'); } catch (e) {}
+    try { for (var i = 0; i < win.frames.length; i++) toFrames(win.frames[i], msg, depth + 1); } catch (e) {}
+  }
   function tellApp() {
     var f = document.getElementById('app');
-    try { if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'le-notif', on: notifOn() }, '*'); } catch (e) {}
-    document.getElementById('notif').style.display = OS && !notifOn() && !LATER && valid(stored()) ? 'flex' : 'none';
+    if (f && f.contentWindow) toFrames(f.contentWindow, { type: 'le-notif', on: notifOn() }, 0);
+    // The bell shows by itself whenever notifications are not on (not waiting for the page or for OneSignal).
+    document.getElementById('notif').style.display = !notifOn() && !LATER && valid(stored()) ? 'flex' : 'none';
   }
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   window.OneSignalDeferred.push(async function (OneSignal) {
@@ -112,12 +124,16 @@
     tellApp();
   });
   document.getElementById('notifOn').addEventListener('click', async function () {
-    if (!OS) return;
-    try { await OS.Notifications.requestPermission(); await OS.User.PushSubscription.optIn(); } catch (e) {}
+    try {
+      if (OS) { await OS.Notifications.requestPermission(); await OS.User.PushSubscription.optIn(); }
+      else if (typeof Notification !== 'undefined') { await Notification.requestPermission(); } // OneSignal not loaded yet: ask anyway
+    } catch (e) {}
     tellApp();
   });
   document.getElementById('notifLater').addEventListener('click', function () { LATER = true; tellApp(); });
-  // Messages from the Edge page inside the frame: badge count and "hello" (asks for the notification state).
+  tellApp(); // show the bell right away; OneSignal updates it when it loads
+  setTimeout(tellApp, 4000);
+  // Messages from the Edge page (it posts to window.top = this page): badge count and "hello".
   window.addEventListener('message', function (e) {
     if (!/(\.googleusercontent\.com|script\.google\.com)$/.test(String(e.origin || '').replace(/:\d+$/, ''))) return;
     var d = e.data || {};
