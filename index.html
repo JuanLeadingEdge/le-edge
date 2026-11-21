@@ -12,6 +12,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
+<!-- WO-058: OneSignal web push (app id is public). The service worker is OneSignalSDKWorker.js in this folder. -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <style>
   html, body { margin: 0; height: 100%; background: #16181d; color: #ececec; font-family: -apple-system, system-ui, Arial, sans-serif; overflow: hidden; overscroll-behavior: none; }
   body { position: fixed; inset: 0; } /* the wrapper never scrolls or bounces */
@@ -28,6 +30,10 @@
   .plain { background: #272b33; color: #ececec; }
   #err { color: #ff8a86; min-height: 22px; font-size: 15px; }
   #reset { position: fixed; z-index: 2; right: 0; bottom: 0; width: 44px; height: 44px; opacity: 0; }
+  /* "Turn on notifications": iOS only asks after a tap in this page, so the button lives here (not in the Edge page). */
+  #notif { position: fixed; z-index: 3; left: 50%; top: calc(env(safe-area-inset-top) + 64px); transform: translateX(-50%); display: none; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; background: #e5201b; color: #fff; font-size: 15px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+  #notif button { margin: 0; width: auto; height: 34px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
+  #notif .x { background: rgba(255,255,255,.2); color: #fff; }
 </style>
 </head>
 <body>
@@ -47,6 +53,7 @@
 </div>
 <iframe id="app" title="LE Edge" allow="clipboard-write" style="display:none"></iframe>
 <div id="reset" aria-hidden="true"></div>
+<div id="notif"><button type="button" class="plain" id="notifOn">Turn on notifications</button><button type="button" class="x" id="notifLater">Later</button></div>
 <script>
   var KEY_NAME = 'leEdgePhoneLink';
   function stored() { try { return localStorage.getItem(KEY_NAME) || ''; } catch (e) { return ''; } }
@@ -83,6 +90,42 @@
   if (location.hash === '#reset') { history.replaceState(null, '', location.pathname); reset(); }
   var u = stored();
   if (valid(u)) open(phoneLink(u)); else showSetup('');
+
+  // ---------- WO-058: notifications (OneSignal) + app icon badge ----------
+  var APP_ID = 'a934a2fe-4474-48dc-af9e-8827efb8c3ef';
+  var OS = null, LATER = false;
+  function notifOn() { try { return !!(OS && OS.Notifications.permission && OS.User.PushSubscription.optedIn); } catch (e) { return false; } }
+  function tellApp() {
+    var f = document.getElementById('app');
+    try { if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'le-notif', on: notifOn() }, '*'); } catch (e) {}
+    document.getElementById('notif').style.display = OS && !notifOn() && !LATER && valid(stored()) ? 'flex' : 'none';
+  }
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  window.OneSignalDeferred.push(async function (OneSignal) {
+    try {
+      await OneSignal.init({ appId: APP_ID, serviceWorkerPath: 'le-edge/OneSignalSDKWorker.js', serviceWorkerParam: { scope: '/le-edge/' } });
+      OS = OneSignal;
+      await OneSignal.login('le-manager'); // the Manager's phone (LE Core pushes to external id "le-manager")
+      OneSignal.Notifications.addEventListener('permissionChange', tellApp);
+      OneSignal.User.PushSubscription.addEventListener('change', tellApp);
+    } catch (e) { OS = null; }
+    tellApp();
+  });
+  document.getElementById('notifOn').addEventListener('click', async function () {
+    if (!OS) return;
+    try { await OS.Notifications.requestPermission(); await OS.User.PushSubscription.optIn(); } catch (e) {}
+    tellApp();
+  });
+  document.getElementById('notifLater').addEventListener('click', function () { LATER = true; tellApp(); });
+  // Messages from the Edge page inside the frame: badge count and "hello" (asks for the notification state).
+  window.addEventListener('message', function (e) {
+    if (!/(\.googleusercontent\.com|script\.google\.com)$/.test(String(e.origin || '').replace(/:\d+$/, ''))) return;
+    var d = e.data || {};
+    if (d.type === 'le-hello') tellApp();
+    if (d.type === 'le-badge' && typeof d.count === 'number' && navigator.setAppBadge) {
+      try { if (d.count > 0) navigator.setAppBadge(d.count); else navigator.clearAppBadge(); } catch (err) {}
+    }
+  });
 </script>
 </body>
 </html>
